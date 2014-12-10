@@ -1,27 +1,37 @@
 var webpage = require('webpage');
 var url = require('url');
-var S = require('string');
+var fs = require('fs');
+var varname = require('varname');
 
 function Crawler(domain, opts) {
+	if (domain.charAt(domain.length-1) != "/") domain += "/";
 	domain = url.parse(domain);
-	opts = opts || {};
 
+	var delay = 0;
 	var visitedURLs = {};
 	var urlsToVisit = [];
-
-	var page = webpage.create();
-	page.viewportSize = {
+	var sizes = opts.sizes || [{
 		width: 1280,
 		height: 800
-	};
+	}];
+
+
+	var page = webpage.create();
+	page.viewportSize = sizes[0];
+
+	//Clean last run
+	if (fs.exists("runs/" + domain.hostname)) {
+		fs.removeTree("runs/" + domain.hostname);
+	}
 
 	page.onConsoleMessage = function(msg, lineNum, sourceId) {
 		console.log('CONSOLE: ' + msg + ' (from line #' + lineNum + ' in "' + sourceId + '")');
 	};
 
 	page.onResourceError = function(resourceError) {
-		console.log('Unable to load resource (#' + resourceError.id + 'URL:' + resourceError.url + ')');
+		console.log('Unable to load resource (#' + resourceError.id + ' URL:' + resourceError.url + ')');
 		console.log('Error code: ' + resourceError.errorCode + '. Description: ' + resourceError.errorString);
+		logError('Unable to load resource (' + resourceError.errorCode + '): ' + resourceError.url);
 	};
 
 	page.onError = function(msg, trace) {
@@ -37,6 +47,8 @@ function Crawler(domain, opts) {
 		console.error(msgStack.join('\n'));
 	};
 
+	crawl(domain.href);
+
 	function crawl(url) {
 		if ( visitedURLs[url]) {
 			crawlNext();
@@ -44,29 +56,40 @@ function Crawler(domain, opts) {
 		}
 
 		console.log("Open " + url);
+		page.viewportSize = sizes[0]; //Ensure viewport is reset
 		//Open the url
 		page.open(url, pageLoaded);
 	}
 
 	function pageLoaded(status) {
 		visitedURLs[page.url] = {loaded:true, status:status};
-		console.log("Loaded: " + page.url, status);
+
+		//console.log("Loaded: " + page.url, status);
 		if (status === 'success') {
 			scrapeLinks();
-			captureScreenshot();
+			//Delay capture?
+			setTimeout(function() {
+				captureScreenshot();
+				crawlNext();
+			}, delay);
 		} else {
+			crawlNext();
 		}
 
-		crawlNext();
 	}
 
 	function captureScreenshot() {
-		var u = url.parse(page.url);
-		var pathName = S(url.parse(decodeURI(page.url)).pathname).replaceAll("/", "_");
-		if (!pathName || !pathName.length) pathName = "root";
-
 		//Render the page
-		page.render("screenshots/" + u.hostname + "/" + pathName + ".png");
+		var size;
+		for (var i = 0; i < sizes.length; i++) {
+			//if (i > 0) {
+				page.viewportSize = sizes[i];
+				size = page.viewportSize.width + "_" + page.viewportSize.height;
+			//}
+			page.render("runs/" + getHostName() + "/" + (size ? size + "/" : "") + getPageName() + ".png");
+		}
+
+		page.viewportSize = sizes[0];
 	}
 
 	function crawlNext() {
@@ -102,8 +125,25 @@ function Crawler(domain, opts) {
 		}
 	}
 
+	function logError(msg) {
+		if (!fs.exists("runs/" + getHostName() + "/errors.txt")) {
+			//First write. Print some details?
+		}
+		fs.write("runs/" + getHostName() + "/errors.txt", msg + "\n", 'a');
+	}
+
+	function getHostName() {
+		var u = url.parse(page.url);
+		return u.hostname;
+	}
+	function getPageName() {
+		var u = url.parse(page.url);
+		var pathName = varname.dash(url.parse(decodeURI(page.url)).pathname);
+		if (!pathName || !pathName.length) pathName = "root";
+		return pathName;
+	}
+
 	return {
-		crawl: crawl,
 		domain: domain
 	}
 }
