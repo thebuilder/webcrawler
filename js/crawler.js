@@ -14,14 +14,15 @@ function Crawler(domain, opts) {
 		width: 1280,
 		height: 800
 	}];
+	var outputPath = opts.path || "runs/" + domain.hostname;
 
 
 	var page = webpage.create();
 	page.viewportSize = sizes[0];
 
 	//Clean last run
-	if (fs.exists("runs/" + domain.hostname)) {
-		fs.removeTree("runs/" + domain.hostname);
+	if (fs.exists(outputPath)) {
+		fs.removeTree(outputPath);
 	}
 
 	page.onConsoleMessage = function(msg, lineNum, sourceId) {
@@ -84,9 +85,9 @@ function Crawler(domain, opts) {
 		for (var i = 0; i < sizes.length; i++) {
 			//if (i > 0) {
 				page.viewportSize = sizes[i];
-				size = page.viewportSize.width + "_" + page.viewportSize.height;
+				size = page.viewportSize.width + "x" + page.viewportSize.height;
 			//}
-			page.render("runs/" + getHostName() + "/" + (size ? size + "/" : "") + getPageName() + ".png");
+			page.render(outputPath + "/" + (size ? size + "/" : "") + getPageName() + ".png");
 		}
 
 		page.viewportSize = sizes[0];
@@ -126,10 +127,10 @@ function Crawler(domain, opts) {
 	}
 
 	function logError(msg) {
-		if (!fs.exists("runs/" + getHostName() + "/errors.txt")) {
+		if (!fs.exists(outputPath + "/errors.txt")) {
 			//First write. Print some details?
 		}
-		fs.write("runs/" + getHostName() + "/errors.txt", msg + "\n", 'a');
+		fs.write(outputPath + "/errors.txt", msg + "\n", 'a');
 	}
 
 	function getHostName() {
